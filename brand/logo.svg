@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3a3fb0"/>
+      <stop offset="1" stop-color="#0d1238"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.3" cy="0.2" r="0.9">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="dot" cx="0.4" cy="0.35" r="0.7">
+      <stop offset="0" stop-color="#ff6b5f"/>
+      <stop offset="1" stop-color="#e0241a"/>
+    </radialGradient>
+  </defs>
+  <!-- macOS squircle tile -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#tile)"/>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#glow)"/>
+  <!-- record button: white ring + red dot -->
+  <circle cx="512" cy="450" r="200" fill="none" stroke="#ffffff" stroke-width="34"/>
+  <circle cx="512" cy="450" r="138" fill="url(#dot)"/>
+  <!-- yellow marker swoosh: the "draw on it" part -->
+  <path d="M 250 760 C 380 700, 520 790, 640 735 S 760 690, 790 700"
+        fill="none" stroke="#ffd60a" stroke-width="54" stroke-linecap="round"/>
+</svg>

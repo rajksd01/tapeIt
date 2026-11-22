@@ -1,0 +1,18 @@
+{
+  "productName": "TapeIt",
+  "version": "0.1.0",
+  "identifier": "com.screenpen.app",
+  "build": { "frontendDist": "../ui" },
+  "app": {
+    "withGlobalTauri": true,
+    "macOSPrivateApi": true,
+    "windows": [],
+    "security": { "csp": null, "assetProtocol": { "enable": true, "scope": ["$HOME/**", "$CACHE/**"] } }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app"],
+    "icon": ["icons/icon.png"],
+    "macOS": { "signingIdentity": "ScreenPen Local Signing", "minimumSystemVersion": "15.0", "entitlements": "Entitlements.plist" }
+  }
+}

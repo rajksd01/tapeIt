@@ -1,0 +1,534 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root {
+    --bg: #161618;
+    --panel: #1f1f22;
+    --raised: #2a2a2e;
+    --line: rgba(255, 255, 255, 0.1);
+    --fg: rgba(255, 255, 255, 0.92);
+    --dim: rgba(255, 255, 255, 0.55);
+    --accent: #0a84ff;
+    --ok: #30d158;
+    --bad: #ff453a;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--fg);
+    font: 500 13px/1.35 -apple-system, system-ui, sans-serif;
+    cursor: default;
+  }
+  body { display: grid; grid-template-rows: 44px auto auto 1fr; }
+  .titlebar { display: flex; align-items: center; justify-content: center; color: var(--dim); font-weight: 600; }
+
+  button {
+    font: inherit; color: var(--fg); background: var(--raised); border: 1px solid var(--line);
+    border-radius: 7px; padding: 5px 10px; cursor: pointer;
+  }
+  button:hover { background: #34343a; }
+  button:focus-visible, input:focus-visible, .card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button.primary { background: var(--accent); border-color: transparent; }
+  button.danger:hover { background: var(--bad); }
+  input {
+    font: inherit; color: var(--fg); background: var(--panel); border: 1px solid var(--line);
+    border-radius: 7px; padding: 6px 10px;
+  }
+  input[type="date"] { color-scheme: dark; }
+
+  /* Search and filter first: the task is "find my recording". */
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 0 20px 12px; }
+  .controls .search { flex: 1; min-width: 200px; }
+  .segment { display: flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+  .segment button { border: 0; border-radius: 0; background: var(--panel); }
+  .segment button[aria-pressed="true"] { background: var(--accent); }
+  .drive-pill { margin-left: auto; }
+  .drive-pill .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--dim); margin-right: 6px; }
+  .drive-pill.on .dot { background: var(--ok); }
+
+  .stats { display: grid; grid-template-columns: repeat(4, minmax(110px, 1fr)) 2fr; gap: 10px; padding: 0 20px 14px; }
+  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .stat b { display: block; font-size: 20px; font-weight: 650; }
+  .stat span { color: var(--dim); font-size: 12px; }
+  .chart { display: flex; align-items: flex-end; gap: 3px; height: 44px; margin-top: 4px; }
+  .chart div { flex: 1; background: var(--accent); border-radius: 2px 2px 0 0; min-height: 2px; opacity: 0.85; }
+  .chart div.zero { background: var(--line); }
+
+  main { overflow: auto; padding: 0 20px 20px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
+  .media { position: relative; aspect-ratio: 16 / 10; background: black; }
+  .media img, .media video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+  .duration { position: absolute; right: 6px; bottom: 6px; background: rgba(0, 0, 0, 0.7); border-radius: 5px; padding: 1px 6px; font-size: 11px; z-index: 1; }
+  .body { padding: 10px 12px 12px; display: grid; gap: 6px; }
+  .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .name input { width: 100%; }
+  .meta { color: var(--dim); font-size: 12px; display: flex; justify-content: space-between; gap: 6px; }
+  .badge { font-size: 11px; font-weight: 600; text-align: right; }
+  .badge.on { color: var(--ok); }
+  .badge.busy { color: var(--accent); }
+  .badge.failed { color: var(--bad); }
+  .progress { height: 3px; background: var(--line); border-radius: 2px; overflow: hidden; }
+  .progress div { height: 100%; background: var(--accent); transition: width 200ms linear; }
+  /* Row actions stay reachable by keyboard: full opacity on hover and on focus inside the card. */
+  .actions { display: flex; flex-wrap: wrap; gap: 4px; opacity: 0.35; transition: opacity 120ms ease; }
+  .card:hover .actions, .card:focus-within .actions { opacity: 1; }
+  .actions button { padding: 3px 8px; font-size: 12px; }
+
+  .empty { display: grid; place-items: center; gap: 12px; padding: 80px 0; color: var(--dim); text-align: center; }
+
+  dialog { background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 12px; padding: 20px; width: 440px; }
+  dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
+  dialog h2 { font-size: 15px; margin-bottom: 10px; }
+  dialog label { display: grid; gap: 4px; margin-bottom: 10px; color: var(--dim); font-size: 12px; }
+  dialog .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+  dialog .hint { color: var(--dim); font-size: 12px; margin-bottom: 12px; }
+  dialog .policy { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px 0; margin-bottom: 4px; }
+  dialog .policy legend { color: var(--dim); font-size: 12px; padding: 0 4px; }
+  dialog .check { display: flex; gap: 8px; align-items: center; color: var(--fg); font-size: 13px; }
+
+  .toast {
+    position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%) translateY(20px); opacity: 0;
+    background: var(--raised); border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px;
+    transition: opacity 150ms ease, transform 150ms ease; pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+  <div class="titlebar" data-tauri-drag-region>TapeIt</div>
+
+  <div class="controls" role="search">
+    <input class="search" id="search" type="search" placeholder="Search recordings" aria-label="Search recordings">
+    <div class="segment" role="group" aria-label="Drive filter">
+      <button data-filter="all" aria-pressed="true">All</button>
+      <button data-filter="local" aria-pressed="false">Not on Drive</button>
+      <button data-filter="drive" aria-pressed="false">On Drive</button>
+    </div>
+    <input type="date" id="from" aria-label="From date">
+    <input type="date" id="to" aria-label="To date">
+    <button class="drive-pill" id="drive-pill"><span class="dot"></span><span id="drive-label">Google Drive</span></button>
+  </div>
+
+  <section class="stats" aria-label="Totals">
+    <div class="stat"><b id="stat-count">0</b><span>Recordings</span></div>
+    <div class="stat"><b id="stat-hours">0m</b><span>Recorded</span></div>
+    <div class="stat"><b id="stat-local">0 MB</b><span>On this Mac</span></div>
+    <div class="stat"><b id="stat-drive">0 MB</b><span>On Drive</span></div>
+    <div class="stat"><span>Last 14 days</span><div class="chart" id="chart" role="img"></div></div>
+  </section>
+
+  <main>
+    <div class="grid" id="grid"></div>
+    <div class="empty" id="empty" hidden>
+      <div id="empty-text">No recordings yet.</div>
+      <button class="primary" id="record">Start recording (⌃⌥R)</button>
+    </div>
+  </main>
+
+  <dialog id="drive-dialog" aria-labelledby="drive-title">
+    <h2 id="drive-title">Google Drive</h2>
+    <p class="hint" id="account">Sign in with your Google account. Recordings go to your own Drive, free. TapeIt can only see files it uploads.</p>
+    <fieldset class="policy">
+      <legend>After each recording</legend>
+      <label class="check"><input type="radio" name="upload" value="ask"> Ask me</label>
+      <label class="check"><input type="radio" name="upload" value="always"> Always upload</label>
+      <label class="check"><input type="radio" name="upload" value="never"> Never upload</label>
+    </fieldset>
+    <div class="row">
+      <button id="disconnect" class="danger">Disconnect</button>
+      <button id="close-dialog">Close</button>
+      <button id="connect" class="primary">Connect Google account</button>
+    </div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+  const { invoke, convertFileSrc } = window.__TAURI__.core;
+  const { listen } = window.__TAURI__.event;
+
+  const DAY_MS = 86_400_000;
+  const CHART_DAYS = 14;
+  const TOAST_MS = 2200;
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const state = { items: [], jobs: new Map(), progress: new Map(), filter: 'all', drive: null };
+  const $ = (id) => document.getElementById(id);
+
+  // ---- formatting ----
+  const formatBytes = (bytes) => {
+    if (bytes >= 1e9) {
+      return `${(bytes / 1e9).toFixed(1)} GB`;
+    }
+    return `${Math.round(bytes / 1e6)} MB`;
+  };
+  const formatDuration = (seconds) => {
+    const total = Math.round(seconds);
+    return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+  };
+  const formatHours = (seconds) => {
+    const minutes = Math.round(seconds / 60);
+    if (minutes < 60) {
+      return `${minutes}m`;
+    }
+    return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+  };
+  // Local calendar day as YYYY-MM-DD, the same format <input type="date"> uses.
+  const dayKey = (ms) => new Date(ms).toLocaleDateString('en-CA');
+
+  function toast(message) {
+    const element = $('toast');
+    element.textContent = message;
+    element.classList.add('show');
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(() => element.classList.remove('show'), TOAST_MS);
+  }
+
+  // Runs a backend call; errors become a toast instead of a silent failure.
+  async function run(action) {
+    try {
+      return await action();
+    } catch (error) {
+      toast(String(error));
+      return undefined;
+    }
+  }
+
+  // ---- filtering: search text, Drive state, date range ----
+  function matches(item) {
+    const query = $('search').value.trim().toLowerCase();
+    const from = $('from').value;
+    const to = $('to').value;
+    const day = dayKey(item.modified * 1000);
+
+    if (query && !item.name.toLowerCase().includes(query)) {
+      return false;
+    }
+    if (state.filter === 'local' && item.driveLink) {
+      return false;
+    }
+    if (state.filter === 'drive' && !item.driveLink) {
+      return false;
+    }
+    if ((from && day < from) || (to && day > to)) {
+      return false;
+    }
+    return true;
+  }
+
+  // ---- stats: totals over everything, chart over the last 14 days ----
+  function renderStats() {
+    const items = state.items;
+    const sum = (list, field) => list.reduce((total, item) => total + item[field], 0);
+    $('stat-count').textContent = items.length;
+    $('stat-hours').textContent = formatHours(sum(items, 'seconds'));
+    $('stat-local').textContent = formatBytes(sum(items, 'size'));
+    $('stat-drive').textContent = formatBytes(sum(items.filter((item) => item.driveLink), 'size'));
+
+    const counts = new Map();
+    for (const item of items) {
+      const key = dayKey(item.modified * 1000);
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+
+    const days = Array.from({ length: CHART_DAYS }, (_, index) => dayKey(Date.now() - (CHART_DAYS - 1 - index) * DAY_MS));
+    const peak = Math.max(1, ...days.map((day) => counts.get(day) || 0));
+    const chart = $('chart');
+    chart.replaceChildren(...days.map((day) => {
+      const count = counts.get(day) || 0;
+      const bar = document.createElement('div');
+      bar.style.height = `${(count / peak) * 100}%`;
+      bar.className = count ? '' : 'zero';
+      bar.title = `${day}: ${count}`;
+      return bar;
+    }));
+    chart.setAttribute('aria-label', days.map((day) => `${day}: ${counts.get(day) || 0}`).join(', '));
+  }
+
+  // ---- Drive state per card ----
+  function driveState(item) {
+    const job = state.jobs.get(item.path);
+    if (job?.state === 'uploading') {
+      const fraction = state.progress.get(item.path) || 0;
+      return { label: `Uploading ${Math.round(fraction * 100)}%`, css: 'busy', fraction };
+    }
+    if (job?.state === 'waiting') {
+      return { label: job.error ? `Waiting: ${job.error}` : 'Queued', css: 'busy' };
+    }
+    if (job?.state === 'failed') {
+      return { label: `Failed: ${job.error || 'unknown'}`, css: 'failed' };
+    }
+    if (item.driveLink) {
+      return { label: 'On Drive', css: 'on' };
+    }
+    return { label: 'Not on Drive', css: '' };
+  }
+
+  function button(label, aria, onClick, css = '') {
+    const element = document.createElement('button');
+    element.textContent = label;
+    element.setAttribute('aria-label', aria);
+    element.className = css;
+    element.addEventListener('click', (event) => {
+      event.stopPropagation();
+      onClick();
+    });
+    return element;
+  }
+
+  function driveButton(item) {
+    const job = state.jobs.get(item.path);
+    if (job?.state === 'failed') {
+      return button('Retry', `Retry upload of ${item.name}`, () => upload(item));
+    }
+    if (job) {
+      return button('Cancel', `Cancel upload of ${item.name}`, () => run(() => invoke('cancel_upload', { path: item.path })).then(refreshJobs));
+    }
+    if (item.driveLink) {
+      return button('Copy link', `Copy Drive link of ${item.name}`, async () => {
+        await run(() => invoke('copy_text', { text: item.driveLink }));
+        toast('Link copied');
+      });
+    }
+    return button('Upload', `Upload ${item.name} to Drive`, () => upload(item));
+  }
+
+  // Not connected yet: open setup instead of queueing a job that can only wait.
+  async function upload(item) {
+    if (!state.drive?.connected) {
+      openDriveDialog();
+      return;
+    }
+    await run(() => invoke('upload_recording', { path: item.path }));
+    refreshJobs();
+  }
+
+  // Inline rename: Enter or blur saves, Escape cancels. The extension stays.
+  function startRename(item, nameElement) {
+    const stem = item.name.replace(/\.[^.]+$/, '');
+    const input = document.createElement('input');
+    input.value = stem;
+    input.setAttribute('aria-label', 'New name');
+    nameElement.replaceChildren(input);
+    input.focus();
+    input.select();
+
+    const finish = async (save) => {
+      input.onblur = null;
+      const next = input.value.trim();
+      if (save && next && next !== stem) {
+        await run(() => invoke('rename_recording', { path: item.path, name: next }));
+      }
+      load();
+    };
+    input.onkeydown = (event) => {
+      if (event.key === 'Enter') {
+        finish(true);
+      }
+      if (event.key === 'Escape') {
+        finish(false);
+      }
+    };
+    input.onblur = () => finish(true);
+  }
+
+  // Hover preview plays the real file muted; reduced-motion users keep the still frame.
+  function attachPreview(card, media, item) {
+    if (reducedMotion || item.name.toLowerCase().endsWith('.gif')) {
+      return;
+    }
+    let video = null;
+    card.addEventListener('mouseenter', () => {
+      video = document.createElement('video');
+      video.src = convertFileSrc(item.path);
+      video.muted = true;
+      video.loop = true;
+      video.autoplay = true;
+      video.playsInline = true;
+      media.appendChild(video);
+    });
+    card.addEventListener('mouseleave', () => {
+      video?.remove();
+      video = null;
+    });
+  }
+
+  function renderMedia(item, card) {
+    const media = document.createElement('div');
+    media.className = 'media';
+    if (item.thumb) {
+      const image = document.createElement('img');
+      image.src = convertFileSrc(item.thumb);
+      image.alt = '';
+      image.loading = 'lazy';
+      media.appendChild(image);
+    }
+    if (item.seconds) {
+      const duration = document.createElement('span');
+      duration.className = 'duration';
+      duration.textContent = formatDuration(item.seconds);
+      media.appendChild(duration);
+    }
+    attachPreview(card, media, item);
+    return media;
+  }
+
+  function renderCard(item) {
+    const card = document.createElement('article');
+    card.className = 'card';
+    card.tabIndex = 0;
+    card.setAttribute('aria-label', item.name);
+    card.addEventListener('dblclick', () => run(() => invoke('edit_recording', { path: item.path })));
+
+    const body = document.createElement('div');
+    body.className = 'body';
+
+    const name = document.createElement('div');
+    name.className = 'name';
+    name.textContent = item.name;
+    name.title = item.name;
+
+    const drive = driveState(item);
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    const when = document.createElement('span');
+    const date = new Date(item.modified * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+    when.textContent = `${date} · ${formatBytes(item.size)}`;
+    const badge = document.createElement('span');
+    badge.className = `badge ${drive.css}`;
+    badge.textContent = drive.label;
+    meta.append(when, badge);
+    body.append(name, meta);
+
+    if (drive.fraction !== undefined) {
+      const track = document.createElement('div');
+      track.className = 'progress';
+      const fill = document.createElement('div');
+      fill.style.width = `${drive.fraction * 100}%`;
+      track.append(fill);
+      body.append(track);
+    }
+
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+    actions.append(
+      button('Edit', `Open ${item.name} in the editor`, () => run(() => invoke('edit_recording', { path: item.path }))),
+      button('Finder', `Show ${item.name} in Finder`, () => invoke('reveal', { path: item.path })),
+      button('Rename', `Rename ${item.name}`, () => startRename(item, name)),
+      driveButton(item),
+      // Trash is reversible from Finder, so no confirm dialog.
+      button('Delete', `Move ${item.name} to Trash`, async () => {
+        const done = await run(() => invoke('delete_recording', { path: item.path }).then(() => true));
+        if (done) {
+          toast('Moved to Trash');
+        }
+      }, 'danger'),
+    );
+    body.append(actions);
+
+    card.append(renderMedia(item, card), body);
+    return card;
+  }
+
+  function render() {
+    renderStats();
+    const items = state.items.filter(matches);
+    $('grid').replaceChildren(...items.map(renderCard));
+
+    $('empty').hidden = items.length > 0;
+    $('empty-text').textContent = state.items.length ? 'No recordings match.' : 'No recordings yet.';
+    $('record').hidden = state.items.length > 0;
+  }
+
+  function renderDrive() {
+    const drive = state.drive;
+    $('drive-pill').classList.toggle('on', Boolean(drive?.connected));
+    if (!drive?.available) {
+      $('drive-label').textContent = 'Drive unavailable';
+      return;
+    }
+    $('drive-label').textContent = drive.connected ? (drive.account || 'Drive connected') : 'Connect Google Drive';
+  }
+
+  async function refreshJobs() {
+    const jobs = (await run(() => invoke('upload_jobs'))) || [];
+    state.jobs = new Map(jobs.map((job) => [job.path, job]));
+    render();
+  }
+
+  async function load() {
+    const [items, drive] = await Promise.all([run(() => invoke('list_recordings')), run(() => invoke('drive_status'))]);
+    state.items = items || [];
+    state.drive = drive;
+    renderDrive();
+    await refreshJobs();
+  }
+
+  // ---- Drive dialog ----
+  function openDriveDialog() {
+    const drive = state.drive;
+    $('account').textContent = drive?.connected
+      ? `Connected as ${drive.account || 'your Google account'}. Recordings upload to this account's Drive.`
+      : 'Sign in with your Google account. Recordings go to your own Drive, free. TapeIt can only see files it uploads.';
+    // Connected: offer switching accounts; the button runs a fresh sign-in.
+    $('connect').textContent = drive?.connected ? 'Switch account' : 'Connect Google account';
+    $('connect').hidden = !drive?.available;
+    const policy = state.drive?.upload || 'ask';
+    document.querySelectorAll('input[name="upload"]').forEach((radio) => {
+      radio.checked = radio.value === policy;
+    });
+    $('disconnect').hidden = !state.drive?.connected;
+    $('drive-dialog').showModal();
+  }
+
+  $('drive-pill').addEventListener('click', openDriveDialog);
+  $('close-dialog').addEventListener('click', () => $('drive-dialog').close());
+  for (const radio of document.querySelectorAll('input[name="upload"]')) {
+    radio.addEventListener('change', () => run(() => invoke('set_upload_policy', { policy: radio.value })).then(load));
+  }
+  $('disconnect').addEventListener('click', async () => {
+    await run(() => invoke('drive_disconnect'));
+    $('drive-dialog').close();
+    load();
+  });
+  $('connect').addEventListener('click', async () => {
+    toast('Finish sign-in in your browser');
+    const connected = await run(() => invoke('drive_connect').then(() => true));
+    if (connected) {
+      toast('Google Drive connected');
+      $('drive-dialog').close();
+    }
+    load();
+  });
+
+  // ---- controls ----
+  $('search').addEventListener('input', render);
+  $('from').addEventListener('change', render);
+  $('to').addEventListener('change', render);
+  for (const option of document.querySelectorAll('[data-filter]')) {
+    option.addEventListener('click', () => {
+      state.filter = option.dataset.filter;
+      document.querySelectorAll('[data-filter]').forEach((other) => other.setAttribute('aria-pressed', String(other === option)));
+      render();
+    });
+  }
+  $('record').addEventListener('click', () => invoke('record'));
+
+  listen('library-changed', load);
+  listen('upload-progress', ({ payload: [path, fraction] }) => {
+    state.progress.set(path, fraction);
+    render();
+  });
+
+  load();
+</script>
+</body>
+</html>

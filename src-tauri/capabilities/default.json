@@ -1,0 +1,5 @@
+{
+  "identifier": "default",
+  "windows": ["toolbar", "overlay", "camera", "editor", "dashboard"],
+  "permissions": ["core:default", "core:window:allow-start-dragging"]
+}

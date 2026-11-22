@@ -1,0 +1,517 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; background: transparent; overflow: hidden; user-select: none; -webkit-user-select: none; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; }
+  body.draw, body.select { cursor: crosshair; }
+  body.draw.text { cursor: text; }
+  body.draw.eraser { cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><circle cx="16" cy="16" r="13" fill="rgba(255,255,255,0.25)" stroke="white" stroke-width="2"/><circle cx="16" cy="16" r="13" fill="none" stroke="black" stroke-opacity="0.4" stroke-width="0.5"/></svg>') 16 16, crosshair; }
+
+  .hint, .keys {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    border-radius: 12px;
+    background: rgba(28, 28, 30, 0.9);
+    color: rgba(255, 255, 255, 0.95);
+    font: 600 13px -apple-system, system-ui, sans-serif;
+  }
+  .hint { bottom: 64px; padding: 10px 16px; display: none; }
+  body.select .hint { display: block; }
+
+  .keys {
+    bottom: 96px; padding: 12px 20px; font-size: 28px; letter-spacing: 0.02em;
+    opacity: 0; transition: opacity 200ms ease;
+  }
+  .keys.show { opacity: 1; }
+
+  .countdown {
+    position: fixed; left: 50%; top: 50%;
+    width: 140px; height: 140px; margin: -70px 0 0 -70px;
+    display: none; place-items: center; border-radius: 70px;
+    background: rgba(28, 28, 30, 0.85); color: white;
+    font: 700 64px -apple-system, system-ui, sans-serif;
+    font-variant-numeric: tabular-nums;
+  }
+  .countdown.show { display: grid; }
+  .countdown span { animation: pop 900ms cubic-bezier(0.2, 0.9, 0.3, 1); }
+  @keyframes pop { from { transform: scale(1.4); opacity: 0; } 30% { opacity: 1; } to { transform: scale(1); } }
+
+  .text-input {
+    position: fixed; min-width: 40px; padding: 0; border: none; outline: none; background: transparent;
+    font: 700 28px -apple-system, system-ui, sans-serif;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+    caret-color: currentColor;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .countdown span { animation: none; }
+  }
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div class="hint">Drag to choose an area · Esc to cancel</div>
+<div class="keys" id="keys"></div>
+<div class="countdown" id="countdown"></div>
+
+<script>
+  const { invoke } = window.__TAURI__.core;
+  const { listen } = window.__TAURI__.event;
+
+  const FADE_HOLD_MS = 800;
+  const FADE_OUT_MS = 700;
+  const MIN_AREA = 40;
+  const ARROW_HEAD = 18;
+  const ARROW_ANGLE = Math.PI / 7;
+  const TEXT_FONT = '700 28px -apple-system, system-ui, sans-serif';
+  const STEP_RADIUS = 17;
+  const SPOTLIGHT_RADIUS = 130;
+  const SPOTLIGHT_DIM = 'rgba(0, 0, 0, 0.55)';
+  const RIPPLE_MS = 550;
+  const RIPPLE_RADIUS = 30;
+  const KEYS_VISIBLE_MS = 1400;
+  const KEYS_KEPT = 4;
+  const COUNTDOWN_FROM = 3;
+  const ERASER_RADIUS = 13;
+  const DARK_INK =new Set(['#ffd60a', '#ffffff', '#30d158']);
+  const TOOLS = {
+    pen: { width: 4, alpha: 1 },
+    highlighter: { width: 22, alpha: 0.35 },
+    arrow: { width: 5, alpha: 1 },
+    rect: { width: 4, alpha: 1 },
+    text: { width: 0, alpha: 1 },
+    step: { width: 0, alpha: 1 },
+  };
+
+  const canvas = document.getElementById('canvas');
+  const context = canvas.getContext('2d');
+  const $ = (id) => document.getElementById(id);
+
+  let ink = { tool: 'pen', color: '#ff453a', life: 'fading' };
+  let mode = 'pointer';
+  let strokes = [];
+  let current = null;
+  let selection = null;
+  let recordedArea = null;
+  let spotlight = false;
+  let cursor = { x: innerWidth / 2, y: innerHeight / 2 };
+  let ripples = [];
+  let keys = [];
+  let keysTimer = null;
+  let stepCount = 0;
+  let editor = null;
+  let erasing = false;
+  let frameRequested = false;
+
+  function resize() {
+    const ratio = window.devicePixelRatio;
+    canvas.width = innerWidth * ratio;
+    canvas.height = innerHeight * ratio;
+    context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    requestDraw();
+  }
+  addEventListener('resize', resize);
+
+  function opacity(stroke, now) {
+    if (stroke.life !== 'fading' || !stroke.endedAt) return 1;
+    const fading = Math.max(0, now - stroke.endedAt - FADE_HOLD_MS);
+    return Math.max(0, 1 - fading / FADE_OUT_MS);
+  }
+
+  function requestDraw() {
+    if (frameRequested) return;
+    frameRequested = true;
+    requestAnimationFrame(draw);
+  }
+
+  function draw() {
+    frameRequested = false;
+    const now = performance.now();
+    strokes = strokes.filter((stroke) => opacity(stroke, now) > 0);
+    ripples = ripples.filter((ripple) => now - ripple.start < RIPPLE_MS);
+
+    context.clearRect(0, 0, innerWidth, innerHeight);
+    drawSpotlight();
+    for (const stroke of strokes) render(stroke, opacity(stroke, now));
+    if (current) render(current, 1);
+    drawRipples(now);
+    drawRecordedArea();
+    drawSelection();
+
+    const animating = ripples.length > 0 || strokes.some((stroke) => stroke.life === 'fading');
+    if (animating) requestDraw();
+  }
+
+  function render(stroke, alpha) {
+    const style = TOOLS[stroke.tool];
+    context.save();
+    context.globalAlpha = style.alpha * alpha;
+    context.strokeStyle = stroke.color;
+    context.fillStyle = stroke.color;
+    context.lineWidth = style.width;
+    context.lineCap = 'round';
+    context.lineJoin = 'round';
+
+    switch (stroke.tool) {
+      case 'text': drawText(stroke); break;
+      case 'step': drawStep(stroke); break;
+      case 'rect': drawRect(stroke); break;
+      default:
+        context.beginPath();
+        stroke.tool === 'arrow' ? arrowPath(stroke.points) : smoothPath(stroke.points);
+        context.stroke();
+    }
+    context.restore();
+  }
+
+  // Quadratic curves through segment midpoints smooth out jittery pointer samples.
+  function smoothPath(points) {
+    context.moveTo(points[0].x, points[0].y);
+    for (let index = 1; index < points.length - 1; index++) {
+      const next = points[index + 1];
+      context.quadraticCurveTo(points[index].x, points[index].y, (points[index].x + next.x) / 2, (points[index].y + next.y) / 2);
+    }
+    const last = points[points.length - 1];
+    context.lineTo(last.x, last.y);
+  }
+
+  function arrowPath(points) {
+    const start = points[0];
+    const end = points[points.length - 1];
+    context.moveTo(start.x, start.y);
+    context.lineTo(end.x, end.y);
+    if (start.x === end.x && start.y === end.y) return;
+
+    const angle = Math.atan2(end.y - start.y, end.x - start.x);
+    for (const side of [-ARROW_ANGLE, ARROW_ANGLE]) {
+      context.moveTo(end.x, end.y);
+      context.lineTo(end.x - ARROW_HEAD * Math.cos(angle + side), end.y - ARROW_HEAD * Math.sin(angle + side));
+    }
+  }
+
+  function drawRect(stroke) {
+    const [start, end] = [stroke.points[0], stroke.points[stroke.points.length - 1]];
+    context.beginPath();
+    context.roundRect(Math.min(start.x, end.x), Math.min(start.y, end.y), Math.abs(end.x - start.x), Math.abs(end.y - start.y), 6);
+    context.stroke();
+  }
+
+  function drawText(stroke) {
+    context.font = TEXT_FONT;
+    context.textBaseline = 'top';
+    context.shadowColor = 'rgba(0, 0, 0, 0.6)';
+    context.shadowBlur = 3;
+    context.shadowOffsetY = 1;
+    context.fillText(stroke.text, stroke.points[0].x, stroke.points[0].y);
+  }
+
+  function drawStep(stroke) {
+    const { x, y } = stroke.points[0];
+    context.shadowColor = 'rgba(0, 0, 0, 0.4)';
+    context.shadowBlur = 6;
+    context.beginPath();
+    context.arc(x, y, STEP_RADIUS, 0, Math.PI * 2);
+    context.fill();
+    context.shadowBlur = 0;
+    context.fillStyle = DARK_INK.has(stroke.color) ? '#1c1c1e' : 'white';
+    context.font = '700 17px -apple-system, system-ui, sans-serif';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(String(stroke.number), x, y + 1);
+  }
+
+  function drawSpotlight() {
+    if (!spotlight) return;
+    context.save();
+    context.fillStyle = SPOTLIGHT_DIM;
+    context.fillRect(0, 0, innerWidth, innerHeight);
+    const gradient = context.createRadialGradient(cursor.x, cursor.y, SPOTLIGHT_RADIUS * 0.8, cursor.x, cursor.y, SPOTLIGHT_RADIUS);
+    gradient.addColorStop(0, 'black');
+    gradient.addColorStop(1, 'transparent');
+    context.globalCompositeOperation = 'destination-out';
+    context.fillStyle = gradient;
+    context.beginPath();
+    context.arc(cursor.x, cursor.y, SPOTLIGHT_RADIUS, 0, Math.PI * 2);
+    context.fill();
+    context.restore();
+  }
+
+  function drawRipples(now) {
+    for (const ripple of ripples) {
+      const progress = (now - ripple.start) / RIPPLE_MS;
+      const eased = 1 - Math.pow(1 - progress, 3);
+      context.save();
+      context.globalAlpha = 1 - progress;
+      context.strokeStyle = '#0a84ff';
+      context.fillStyle = 'rgba(10, 132, 255, 0.25)';
+      context.lineWidth = 3;
+      context.beginPath();
+      context.arc(ripple.x, ripple.y, 6 + eased * RIPPLE_RADIUS, 0, Math.PI * 2);
+      context.fill();
+      context.stroke();
+      context.restore();
+    }
+  }
+
+  function normalized(box) {
+    return {
+      x: Math.min(box.x0, box.x1),
+      y: Math.min(box.y0, box.y1),
+      width: Math.abs(box.x1 - box.x0),
+      height: Math.abs(box.y1 - box.y0),
+    };
+  }
+
+  function drawSelection() {
+    if (mode !== 'select') return;
+    context.fillStyle = 'rgba(0, 0, 0, 0.35)';
+    context.fillRect(0, 0, innerWidth, innerHeight);
+    if (!selection) return;
+
+    const area = normalized(selection);
+    context.clearRect(area.x, area.y, area.width, area.height);
+    context.strokeStyle = 'white';
+    context.lineWidth = 1;
+    context.strokeRect(area.x + 0.5, area.y + 0.5, area.width - 1, area.height - 1);
+
+    const label = `${Math.round(area.width)} × ${Math.round(area.height)}`;
+    context.font = '600 12px -apple-system, system-ui';
+    context.fillStyle = 'rgba(28, 28, 30, 0.9)';
+    context.fillRect(area.x, area.y + area.height + 6, context.measureText(label).width + 16, 22);
+    context.fillStyle = 'white';
+    context.fillText(label, area.x + 8, area.y + area.height + 21);
+  }
+
+  // Drawn just outside the area, so it never shows in the recording.
+  function drawRecordedArea() {
+    if (!recordedArea) return;
+    context.save();
+    context.strokeStyle = '#ff453a';
+    context.lineWidth = 2;
+    context.setLineDash([6, 4]);
+    context.strokeRect(recordedArea.x - 2, recordedArea.y - 2, recordedArea.width + 4, recordedArea.height + 4);
+    context.restore();
+  }
+
+  function segmentDistance(at, start, end) {
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const lengthSquared = dx * dx + dy * dy;
+    const along = lengthSquared === 0 ? 0 : Math.max(0, Math.min(1, ((at.x - start.x) * dx + (at.y - start.y) * dy) / lengthSquared));
+    return Math.hypot(at.x - (start.x + along * dx), at.y - (start.y + along * dy));
+  }
+
+  function pathDistance(at, points) {
+    if (points.length === 1) return Math.hypot(at.x - points[0].x, at.y - points[0].y);
+    let nearest = Infinity;
+    for (let index = 1; index < points.length; index++) {
+      nearest = Math.min(nearest, segmentDistance(at, points[index - 1], points[index]));
+    }
+    return nearest;
+  }
+
+  function hits(stroke, at) {
+    const [start, end] = [stroke.points[0], stroke.points[stroke.points.length - 1]];
+    switch (stroke.tool) {
+      case 'step':
+        return Math.hypot(at.x - start.x, at.y - start.y) <= STEP_RADIUS + ERASER_RADIUS;
+      case 'text': {
+        context.font = TEXT_FONT;
+        const width = context.measureText(stroke.text).width;
+        return at.x >= start.x - ERASER_RADIUS && at.x <= start.x + width + ERASER_RADIUS
+          && at.y >= start.y - ERASER_RADIUS && at.y <= start.y + 34 + ERASER_RADIUS;
+      }
+      case 'rect': {
+        const corners = [start, { x: end.x, y: start.y }, end, { x: start.x, y: end.y }, start];
+        return pathDistance(at, corners) <= ERASER_RADIUS + TOOLS.rect.width / 2;
+      }
+      default:
+        return pathDistance(at, stroke.points) <= ERASER_RADIUS + TOOLS[stroke.tool].width / 2;
+    }
+  }
+
+  function erase(at) {
+    const before = strokes.length;
+    strokes = strokes.filter((stroke) => !hits(stroke, at));
+    if (strokes.length !== before) requestDraw();
+  }
+
+  function addStroke(stroke) {
+    stroke.endedAt = performance.now();
+    strokes.push(stroke);
+    requestDraw();
+  }
+
+  function openEditor(at) {
+    closeEditor();
+    const input = document.createElement('input');
+    input.className = 'text-input';
+    input.style.left = `${at.x}px`;
+    input.style.top = `${at.y}px`;
+    input.style.color = ink.color;
+    document.body.append(input);
+    editor = { input, at, ink: { ...ink } };
+    setTimeout(() => input.focus());
+
+    input.addEventListener('keydown', (event) => {
+      event.stopPropagation();
+      if (event.key === 'Enter') closeEditor();
+      if (event.key === 'Escape') { input.value = ''; closeEditor(); }
+    });
+    input.addEventListener('blur', closeEditor);
+  }
+
+  function closeEditor() {
+    if (!editor) return;
+    const { input, at, ink: style } = editor;
+    editor = null;
+    const text = input.value.trim();
+    input.remove();
+    if (text) addStroke({ ...style, tool: 'text', text, points: [at] });
+  }
+
+  async function countdown(area) {
+    const box = $('countdown');
+    box.classList.add('show');
+    for (let count = COUNTDOWN_FROM; count > 0; count--) {
+      box.innerHTML = `<span>${count}</span>`;
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+    box.classList.remove('show');
+
+    // Two frames so the countdown is gone before capture starts.
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    invoke('start_recording', { area }).catch((error) => console.error(error));
+  }
+
+  function point(event) {
+    return { x: event.clientX, y: event.clientY };
+  }
+
+  canvas.addEventListener('pointerdown', (event) => {
+    const start = point(event);
+    if (mode === 'select') {
+      canvas.setPointerCapture(event.pointerId);
+      selection = { x0: start.x, y0: start.y, x1: start.x, y1: start.y };
+      return requestDraw();
+    }
+    if (mode !== 'draw') return;
+
+    if (ink.tool === 'text') {
+      event.preventDefault();
+      return openEditor(start);
+    }
+    if (ink.tool === 'eraser') {
+      canvas.setPointerCapture(event.pointerId);
+      erasing = true;
+      return erase(start);
+    }
+    if (ink.tool === 'step') {
+      stepCount += 1;
+      return addStroke({ ...ink, number: stepCount, points: [start] });
+    }
+
+    canvas.setPointerCapture(event.pointerId);
+    current = { ...ink, points: [start] };
+    requestDraw();
+  });
+
+  canvas.addEventListener('pointermove', (event) => {
+    const next = point(event);
+    if (spotlight) {
+      cursor = next;
+      requestDraw();
+    }
+
+    if (erasing) return erase(next);
+    if (selection && mode === 'select') {
+      selection.x1 = next.x;
+      selection.y1 = next.y;
+    } else if (current) {
+      const straight = current.tool === 'arrow' || current.tool === 'rect';
+      current.points = straight ? [current.points[0], next] : [...current.points, next];
+    } else {
+      return;
+    }
+    requestDraw();
+  });
+
+  canvas.addEventListener('pointerup', async () => {
+    erasing = false;
+    if (current) {
+      addStroke(current);
+      current = null;
+      return;
+    }
+    if (!selection) return;
+
+    const area = normalized(selection);
+    selection = null;
+    await invoke('set_mode', { mode: 'pointer' });
+    if (area.width < MIN_AREA || area.height < MIN_AREA) return;
+    countdown(area);
+  });
+
+  addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      selection = null;
+      invoke('set_mode', { mode: 'pointer' });
+      return;
+    }
+    if (event.metaKey && event.key === 'z') {
+      strokes.pop();
+      requestDraw();
+    }
+  });
+
+  function showKey(label) {
+    keys = [...keys, label].slice(-KEYS_KEPT);
+    $('keys').textContent = keys.join('  ');
+    $('keys').classList.add('show');
+    clearTimeout(keysTimer);
+    keysTimer = setTimeout(() => {
+      $('keys').classList.remove('show');
+      keys = [];
+    }, KEYS_VISIBLE_MS);
+  }
+
+  listen('ink', (event) => {
+    ink = event.payload;
+    document.body.classList.toggle('text', ink.tool === 'text');
+    document.body.classList.toggle('eraser', ink.tool === 'eraser');
+  });
+  listen('clear', () => {
+    strokes = [];
+    current = null;
+    stepCount = 0;
+    requestDraw();
+  });
+  listen('mode', (event) => {
+    closeEditor();
+    mode = event.payload;
+    document.body.classList.remove('pointer', 'draw', 'select');
+    document.body.classList.add(mode);
+    requestDraw();
+  });
+  listen('spotlight', (event) => {
+    spotlight = event.payload;
+    requestDraw();
+  });
+  listen('countdown', (event) => countdown(event.payload));
+  listen('recording', (event) => {
+    recordedArea = event.payload.active ? event.payload.area : null;
+    requestDraw();
+  });
+  listen('input', (event) => {
+    const input = event.payload;
+    if (input.kind === 'key') return showKey(input.label);
+    if (input.kind === 'click') ripples.push({ x: input.x, y: input.y, start: performance.now() });
+    cursor = { x: input.x, y: input.y };
+    requestDraw();
+  });
+
+  resize();
+</script>
+</body>
+</html>
