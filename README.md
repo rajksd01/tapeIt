@@ -23,4 +23,4 @@ TAPEIT_GOOGLE_CLIENT_ID=... TAPEIT_GOOGLE_CLIENT_SECRET=... bunx @tauri-apps/cli
 
 Hotkeys (⌃⌥ +): R record, A area, D draw, C clear, F fade, S spotlight, W webcam, T toolbar.
 
-[Privacy policy](https://rajksd01.github.io/tapeIt/privacy.html)
+[Privacy policy](https://tapeit.rajkasaudhan.com.np/privacy.html)
