@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>TapeIt Demo</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+    <style>
+      :root {
+        --navy: #0d1238;
+        --indigo: #3a3fb0;
+        --red: #ff3b30;
+        --yellow: #ffd60a;
+        --blue: #0a84ff;
+        --ink: #1d1d1f;
+        --muted: #6e6e73;
+        --font: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1920px; height: 1080px; overflow: hidden; background: #070a1f; }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; font-family: var(--font); color: #fff; }
+      .clip { position: absolute; inset: 0; }
+      .scene { position: absolute; inset: 0; }
+      .abs { position: absolute; }
+
+      /* ---------- scene 1 / 6: brand ---------- */
+      .brand-bg { position: absolute; inset: 0; background: radial-gradient(1200px 800px at 50% 40%, #1a2060 0%, #0d1238 45%, #060920 100%); }
+      .stack { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+      .logo { width: 260px; height: 260px; display: block; }
+      .wordmark { font-size: 120px; font-weight: 700; letter-spacing: -0.04em; margin-top: 8px; }
+      .tagline { display: flex; gap: 28px; font-size: 44px; font-weight: 500; color: rgba(255,255,255,.72); margin-top: 18px; letter-spacing: -0.01em; }
+      .tagline span { display: block; }
+
+      /* ---------- desktop ---------- */
+      .wall { position: absolute; inset: 0; background: radial-gradient(1400px 900px at 20% 10%, #4a50c8 0%, #1d2270 40%, #0d1238 80%); }
+      .menubar { position: absolute; left: 0; top: 0; width: 1920px; height: 34px; background: rgba(255,255,255,.14); display: flex; align-items: center; gap: 28px; padding: 0 22px; font-size: 16px; font-weight: 500; }
+      .menubar .right { margin-left: auto; opacity: .85; }
+      .win { position: absolute; background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 40px 120px rgba(0,0,0,.45), 0 0 0 1px rgba(0,0,0,.08); color: var(--ink); }
+      .titlebar { height: 52px; background: #f2f2f4; border-bottom: 1px solid #e3e3e6; display: flex; align-items: center; padding: 0 18px; gap: 9px; }
+      .tl-dot { width: 13px; height: 13px; border-radius: 50%; }
+      .url { margin-left: 120px; width: 620px; height: 32px; border-radius: 9px; background: #e6e6ea; font-size: 15px; color: rgb(103,103,108); display: flex; align-items: center; justify-content: center; }
+
+      .slide-h { left: 340px; top: 238px; font-size: 76px; font-weight: 700; letter-spacing: -0.035em; color: var(--ink); white-space: nowrap; }
+      .slide-p { left: 342px; top: 370px; font-size: 30px; color: var(--muted); white-space: nowrap; }
+      .step { left: 400px; font-size: 30px; font-weight: 500; color: var(--ink); white-space: nowrap; }
+      .cta { left: 340px; top: 780px; width: 300px; height: 76px; border-radius: 16px; background: var(--blue); color: #fff; font-size: 28px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
+      .chart { left: 1080px; top: 470px; width: 480px; height: 300px; border-radius: 18px; background: #f5f5f7; display: flex; align-items: flex-end; gap: 22px; padding: 36px; }
+      .bar { width: 64px; border-radius: 10px; background: #c7c9f5; }
+
+      .pill { left: 690px; top: 52px; width: 540px; height: 68px; border-radius: 34px; background: rgba(28,28,34,.82); box-shadow: 0 16px 40px rgba(0,0,0,.35), inset 0 0 0 1px rgba(255,255,255,.12); display: flex; align-items: center; gap: 14px; padding: 0 14px; }
+      .tool { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
+      .tool svg { width: 26px; height: 26px; display: block; }
+      .sep { width: 1px; height: 30px; background: rgba(255,255,255,.18); }
+      .rec-ring { width: 30px; height: 30px; border-radius: 50%; border: 3px solid #fff; display: flex; align-items: center; justify-content: center; }
+      .rec-dot { width: 16px; height: 16px; border-radius: 50%; background: var(--red); display: block; }
+      .rec-time { font-size: 17px; font-weight: 600; color: #fff; font-variant-numeric: tabular-nums; margin-left: auto; padding-right: 10px; opacity: 0; }
+      .tool-on { position: absolute; width: 44px; height: 44px; border-radius: 12px; background: rgba(255,255,255,.18); top: 12px; left: 0; }
+
+      .dim { position: absolute; inset: 0; background: rgba(6,9,32,.45); }
+      .count { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 280px; font-weight: 700; letter-spacing: -0.05em; }
+      .count span { position: absolute; display: block; }
+
+      .badge { width: 52px; height: 52px; border-radius: 50%; background: var(--red); color: #fff; font-size: 28px; font-weight: 700; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,.18); }
+      .ripple { width: 140px; height: 140px; border-radius: 50%; border: 5px solid var(--yellow); }
+      .chip { left: 860px; top: 992px; width: 200px; height: 72px; border-radius: 20px; background: rgba(28,28,34,.88); color: #fff; font-size: 34px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 14px; box-shadow: 0 16px 40px rgba(0,0,0,.35); }
+      .chip b { display: block; width: 44px; height: 44px; border-radius: 10px; background: rgba(255,255,255,.16); text-align: center; line-height: 44px; font-weight: 600; }
+
+      /* ---------- editor ---------- */
+      .ed { left: 210px; top: 90px; width: 1500px; height: 900px; background: #1c1c22; color: #fff; }
+      .ed .titlebar { background: #26262e; border-bottom: 1px solid #33333c; color: #ddd; font-size: 16px; }
+      .ed-head { position: absolute; left: 0; top: 52px; width: 1500px; height: 70px; display: flex; align-items: center; padding: 0 40px; font-size: 22px; font-weight: 600; }
+      .toggle-wrap { margin-left: auto; display: flex; align-items: center; gap: 16px; font-size: 20px; font-weight: 500; color: #e5e5ea; }
+      .toggle { position: relative; width: 64px; height: 36px; border-radius: 18px; background: #48484f; }
+      .toggle-on { position: absolute; inset: 0; border-radius: 18px; background: #30d158; opacity: 0; }
+      .knob { position: absolute; left: 3px; top: 3px; width: 30px; height: 30px; border-radius: 50%; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.3); }
+      .pv { left: 100px; top: 140px; width: 1300px; height: 560px; border-radius: 12px; overflow: hidden; background: #fff; }
+      .pv-inner { position: absolute; inset: 0; }
+      .pv-h { left: 80px; top: 80px; font-size: 46px; font-weight: 700; letter-spacing: -0.03em; color: var(--ink); white-space: nowrap; }
+      .pv-hl { left: 74px; top: 136px; width: 660px; height: 18px; border-radius: 9px; background: var(--yellow); opacity: .6; }
+      .pv-p { left: 82px; top: 178px; width: 520px; height: 18px; border-radius: 9px; background: #e5e5ea; }
+      .pv-p2 { left: 82px; top: 260px; width: 380px; height: 18px; border-radius: 9px; background: #e5e5ea; }
+      .pv-p3 { left: 82px; top: 310px; width: 420px; height: 18px; border-radius: 9px; background: #e5e5ea; }
+      .pv-btn { left: 80px; top: 400px; width: 190px; height: 50px; border-radius: 11px; background: var(--blue); color: #fff; font-size: 18px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
+      .pv-ring { left: 135px; top: 385px; width: 80px; height: 80px; border-radius: 50%; border: 4px solid var(--yellow); }
+      .pv-chart { left: 760px; top: 220px; width: 440px; height: 260px; border-radius: 14px; background: #f5f5f7; }
+      .track { left: 100px; top: 760px; width: 1300px; height: 84px; border-radius: 10px; overflow: hidden; display: flex; }
+      .thumb { flex: 1; height: 84px; border-right: 2px solid #1c1c22; background: linear-gradient(135deg, #e9e9f2, #c9cbef); }
+      .shade { top: 760px; height: 84px; background: rgba(0,0,0,.6); }
+      .handle { top: 754px; width: 18px; height: 96px; border-radius: 6px; background: var(--yellow); }
+      .playhead { left: 260px; top: 744px; width: 4px; height: 116px; border-radius: 2px; background: #fff; }
+      .time { left: 100px; top: 862px; font-size: 16px; color: #8e8e93; font-variant-numeric: tabular-nums; }
+
+      /* ---------- drive ---------- */
+      .dlg { left: 640px; top: 330px; width: 640px; height: 340px; border-radius: 22px; background: rgba(250,250,252,.97); color: var(--ink); box-shadow: 0 40px 120px rgba(0,0,0,.5); }
+      .dlg-ask, .dlg-prog { position: absolute; inset: 0; padding: 40px 44px; }
+      .dlg-row { display: flex; align-items: center; gap: 18px; }
+      .dlg-title { font-size: 30px; font-weight: 700; letter-spacing: -0.02em; }
+      .dlg-body { font-size: 21px; color: var(--muted); margin-top: 18px; }
+      .btns { position: absolute; left: 44px; right: 44px; bottom: 40px; display: flex; gap: 14px; justify-content: flex-end; }
+      .btn { height: 52px; padding: 0 24px; border-radius: 12px; font-size: 20px; font-weight: 600; display: flex; align-items: center; background: #e8e8ed; color: var(--ink); }
+      .btn-ghost { background: transparent; color: var(--muted); margin-right: auto; padding: 0 8px; }
+      .btn-pri { background: var(--blue); color: #fff; }
+      .prog-track { margin-top: 56px; width: 552px; height: 14px; border-radius: 7px; background: #e5e5ea; overflow: hidden; }
+      .prog-fill { width: 552px; height: 14px; border-radius: 7px; background: var(--blue); transform-origin: 0 50%; }
+      .prog-lbl { margin-top: 20px; font-size: 20px; color: var(--muted); font-variant-numeric: tabular-nums; }
+      .dash { left: 460px; top: 250px; width: 1000px; height: 520px; }
+      .dash-row { position: absolute; left: 40px; top: 120px; width: 920px; height: 150px; border-radius: 16px; background: #f5f5f7; display: flex; align-items: center; padding: 0 24px; gap: 26px; }
+      .dash-row2 { top: 300px; opacity: .55; }
+      .d-thumb { width: 180px; height: 104px; border-radius: 10px; background: linear-gradient(135deg, #3a3fb0, #0d1238); }
+      .d-thumb2 { background: linear-gradient(135deg, #8e8e93, #3a3a40); }
+      .d-name { font-size: 26px; font-weight: 600; }
+      .d-meta { font-size: 19px; color: var(--muted); margin-top: 8px; }
+      .ondrive { margin-left: auto; height: 44px; padding: 0 18px; border-radius: 22px; background: #e3f7e8; color: #1f8a3b; font-size: 19px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+      .uploading { margin-left: auto; font-size: 19px; color: var(--muted); }
+      .toast { left: 800px; top: 900px; width: 320px; height: 70px; border-radius: 35px; background: rgba(28,28,34,.92); color: #fff; font-size: 24px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 12px; box-shadow: 0 16px 40px rgba(0,0,0,.4); }
+
+      .end-title { font-size: 56px; font-weight: 700; letter-spacing: -0.03em; margin-top: 36px; }
+      .end-sub { font-size: 34px; font-weight: 500; color: rgba(255,255,255,.72); margin-top: 12px; }
+      .end-url { font-size: 30px; font-weight: 500; color: var(--yellow); margin-top: 40px; letter-spacing: 0.01em; }
+
+      .cursor { position: absolute; left: 0; top: 0; width: 34px; height: 34px; opacity: 0; }
+      .cursor svg { width: 34px; height: 34px; display: block; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="30" data-width="1920" data-height="1080">
+
+      <!-- 1. brand intro -->
+      <section id="s1" class="clip" data-start="0" data-duration="3" data-track-index="0">
+        <div id="s1-w" class="scene">
+          <div class="brand-bg"></div>
+          <div class="stack">
+            <img id="s1-logo" class="logo" src="logo.svg" alt="" />
+            <div id="s1-word" class="wordmark">TapeIt</div>
+            <div class="tagline"><span id="tg1">Record.</span><span id="tg2">Draw.</span><span id="tg3">Share.</span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2+3. desktop, record, live drawing -->
+      <section id="s2" class="clip" data-start="3" data-duration="13" data-track-index="0">
+        <div id="s2-w" class="scene">
+          <div class="wall"></div>
+          <div class="menubar"><b>&#63743;</b><b>Safari</b><span>File</span><span>Edit</span><span>View</span><span class="right">Mon 9:41 AM</span></div>
+          <div class="win" style="left:240px;top:120px;width:1440px;height:860px;">
+            <div class="titlebar">
+              <div class="tl-dot" style="background:#ff5f57"></div><div class="tl-dot" style="background:#febc2e"></div><div class="tl-dot" style="background:#28c840"></div>
+              <div class="url">slides.acme.co/q4-launch</div>
+            </div>
+          </div>
+          <div class="abs slide-h">Ship faster with async demos</div>
+          <div class="abs slide-p">Record once. Everyone watches on their own time.</div>
+          <div class="abs step" style="top:500px">Open the dashboard</div>
+          <div class="abs step" style="top:580px">Click Create report</div>
+          <div class="abs step" style="top:660px;color:#6e6e73">Share the link with your team</div>
+          <div class="abs cta">Create report</div>
+          <div class="abs chart">
+            <div class="bar" style="height:90px"></div><div class="bar" style="height:140px"></div><div class="bar" style="height:120px"></div><div class="bar" style="height:200px;background:#3a3fb0"></div><div class="bar" style="height:228px;background:#3a3fb0"></div>
+          </div>
+
+          <!-- annotation layer -->
+          <svg class="abs" style="left:0;top:0;width:1920px;height:1080px" viewBox="0 0 1920 1080">
+            <path id="hl" d="M 334 340 C 620 333, 940 346, 1352 337" pathLength="1" fill="none" stroke="#ffd60a" stroke-opacity="0.6" stroke-width="30" stroke-linecap="round" stroke-dasharray="1" stroke-dashoffset="1" />
+            <path id="arw" d="M 980 600 C 900 700, 760 760, 668 806" pathLength="1" fill="none" stroke="#ff3b30" stroke-width="10" stroke-linecap="round" stroke-dasharray="1" stroke-dashoffset="1" />
+            <polygon id="arw-head" points="652,814 690,818 672,784" fill="#ff3b30" opacity="0" />
+          </svg>
+          <div id="b1" class="abs badge" style="left:326px;top:490px">1</div>
+          <div id="b2" class="abs badge" style="left:326px;top:570px">2</div>
+          <div id="rip" class="abs ripple" style="left:420px;top:748px"></div>
+
+          <!-- floating toolbar -->
+          <div id="pill" class="abs pill">
+            <div id="tool-on" class="tool-on"></div>
+            <div class="tool"><div class="rec-ring"><span id="recdot" class="rec-dot"></span></div></div>
+            <div class="sep"></div>
+            <div class="tool tl-i"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l4-1 11-11-3-3L5 16z"/></svg></div>
+            <div class="tool tl-i"><svg viewBox="0 0 24 24" fill="none" stroke="#ffd60a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 15l-4 4h5l2-2"/><path d="M9 15l7-11 4 3-7 11z"/></svg></div>
+            <div class="tool tl-i"><svg viewBox="0 0 24 24" fill="none" stroke="#ff3b30" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19L19 5"/><path d="M10 5h9v9"/></svg></div>
+            <div class="tool tl-i"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M6 6h12M12 6v13"/></svg></div>
+            <div class="tool tl-i"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></svg></div>
+            <div id="rectime" class="rec-time">0:04</div>
+          </div>
+
+          <div id="dim" class="dim" style="opacity:0"></div>
+          <div class="count"><span id="c3" style="opacity:0">3</span><span id="c2" style="opacity:0">2</span><span id="c1" style="opacity:0">1</span></div>
+
+          <div id="chip" class="abs chip" style="opacity:0"><b>&#8984;</b><b>S</b></div>
+        </div>
+      </section>
+
+      <!-- 4. editor -->
+      <section id="s4" class="clip" data-start="16" data-duration="5" data-track-index="0">
+        <div id="s4-w" class="scene">
+          <div class="wall"></div>
+          <div class="win ed abs">
+            <div class="titlebar"><div class="tl-dot" style="background:#ff5f57"></div><div class="tl-dot" style="background:#febc2e"></div><div class="tl-dot" style="background:#28c840"></div><span style="margin-left:24px">Q4 Launch demo.mp4</span></div>
+            <div class="ed-head">Edit recording
+              <div class="toggle-wrap">Zoom on clicks<div class="toggle"><div id="tg-on" class="toggle-on"></div><div id="knob" class="knob"></div></div></div>
+            </div>
+            <div class="abs pv">
+              <div id="pv-in" class="pv-inner">
+                <div class="abs pv-h">Ship faster with async demos</div>
+                <div class="abs pv-hl"></div>
+                <div class="abs pv-p"></div><div class="abs pv-p2"></div><div class="abs pv-p3"></div>
+                <div class="abs pv-btn">Create report</div>
+                <div id="pv-ring" class="abs pv-ring" style="opacity:0"></div>
+                <div class="abs pv-chart"></div>
+              </div>
+            </div>
+            <div class="abs track"><div class="thumb"></div><div class="thumb"></div><div class="thumb"></div><div class="thumb"></div><div class="thumb"></div><div class="thumb"></div><div class="thumb"></div><div class="thumb"></div><div class="thumb"></div><div class="thumb"></div></div>
+            <div id="shL" class="abs shade" style="left:100px;width:0"></div>
+            <div id="shR" class="abs shade" style="left:1400px;width:0"></div>
+            <div id="hL" class="abs handle" style="left:96px"></div>
+            <div id="hR" class="abs handle" style="left:1386px"></div>
+            <div id="ph" class="abs playhead"></div>
+            <div class="abs time">0:00 &mdash; 0:42</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. drive -->
+      <section id="s5" class="clip" data-start="21" data-duration="5" data-track-index="0">
+        <div id="s5-w" class="scene">
+          <div class="wall"></div>
+          <div id="dash" class="win abs dash" style="opacity:0">
+            <div class="titlebar"><div class="tl-dot" style="background:#ff5f57"></div><div class="tl-dot" style="background:#febc2e"></div><div class="tl-dot" style="background:#28c840"></div><span style="margin-left:24px;font-size:16px;color:#6e6e73">TapeIt &middot; Recordings</span></div>
+            <div class="dash-row">
+              <div class="d-thumb"></div>
+              <div><div class="d-name">Q4 Launch demo</div><div class="d-meta">0:42 &middot; Just now</div></div>
+              <div id="ondrive" class="ondrive" style="opacity:0">&#10003; On Drive</div>
+            </div>
+            <div class="dash-row dash-row2">
+              <div class="d-thumb d-thumb2"></div>
+              <div><div class="d-name">Bug repro: checkout</div><div class="d-meta">1:15 &middot; Yesterday</div></div>
+            </div>
+          </div>
+          <div id="dlg" class="abs dlg">
+            <div id="ask" class="dlg-ask">
+              <div class="dlg-row">
+                <svg width="52" height="46" viewBox="0 0 87 78"><path d="M6.6 66.85l3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3L27.5 53H0c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/><path d="M43.65 25L29.9 1.2C28.55 2 27.4 3.1 26.6 4.5L1.2 48.5A9 9 0 000 53h27.5z" fill="#00ac47"/><path d="M73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5H59.8l5.85 11.5z" fill="#ea4335"/><path d="M43.65 25L57.4 1.2C56.05.4 54.5 0 52.9 0H34.4c-1.6 0-3.15.45-4.5 1.2z" fill="#00832d"/><path d="M59.8 53H27.5L13.75 76.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z" fill="#2684fc"/><path d="M73.4 26.5L60.7 4.5c-.8-1.4-1.95-2.5-3.3-3.3L43.65 25 59.8 53h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00"/></svg>
+                <div class="dlg-title">Upload to Google Drive?</div>
+              </div>
+              <div class="dlg-body">Get a shareable link the moment it finishes.</div>
+              <div class="btns"><div class="btn btn-ghost">Not Now</div><div class="btn">Always Upload</div><div id="up-btn" class="btn btn-pri">Upload</div></div>
+            </div>
+            <div id="prog" class="dlg-prog" style="opacity:0">
+              <div class="dlg-title">Uploading to Drive</div>
+              <div class="dlg-body">Q4 Launch demo.mp4 &middot; 6.2 MB</div>
+              <div class="prog-track"><div id="pfill" class="prog-fill"></div></div>
+            </div>
+          </div>
+          <div id="toast" class="abs toast" style="opacity:0"><span style="color:#30d158">&#10003;</span> Link copied</div>
+        </div>
+      </section>
+
+      <!-- 6. end card -->
+      <section id="s6" class="clip" data-start="26" data-duration="4" data-track-index="0">
+        <div id="s6-w" class="scene">
+          <div class="brand-bg"></div>
+          <div class="stack">
+            <img id="e-logo" class="logo" src="logo.svg" alt="" style="width:200px;height:200px" />
+            <div id="e-t" class="end-title">TapeIt</div>
+            <div id="e-s" class="end-sub">Free screen recorder with live drawing for Mac</div>
+            <div id="e-u" class="end-url">tapeit.rajkasaudhan.com.np</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- shared cursor, lives above all scenes -->
+      <div id="cur" class="cursor"><svg viewBox="0 0 24 24"><path d="M4 2l16 11-7 1.2L9 21z" fill="#111" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg></div>
+    </div>
+
+    <script>
+      const tl = gsap.timeline({ paused: true });
+      const SPRING = "expo.out";
+      const POP = "back.out(1.7)";
+
+      // cursor helpers: move to (x,y) then press
+      const move = (x, y, at, dur = 0.6) => tl.to("#cur", { x, y, duration: dur, ease: "power3.inOut" }, at);
+      const press = (at) => tl.to("#cur", { scale: 0.82, duration: 0.08, yoyo: true, repeat: 1, ease: "power1.out" }, at);
+      const fadeIn = (sel, at, d = 0.7) => tl.fromTo(sel, { opacity: 0, scale: 1.03 }, { opacity: 1, scale: 1, duration: d, ease: SPRING }, at);
+      const fadeOut = (sel, at, d = 0.4) => tl.to(sel, { opacity: 0, duration: d, ease: "power2.in" }, at);
+
+      // 1. brand intro 0-3s
+      tl.fromTo("#s1-logo", { opacity: 1, scale: 0.9 }, { opacity: 1, scale: 1, duration: 1.2, ease: SPRING }, 0.15);
+      tl.fromTo("#s1-word", { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.8, ease: SPRING }, 0.7);
+      tl.fromTo(["#tg1", "#tg2", "#tg3"], { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.6, ease: SPRING, stagger: 0.22 }, 1.3);
+      fadeOut("#s1-w", 2.6);
+
+      // 2. desktop + toolbar + countdown 3-9s
+      fadeIn("#s2-w", 3.0, 0.9);
+      tl.fromTo("#pill", { opacity: 0, y: -30 }, { opacity: 1, y: 0, duration: 0.8, ease: POP }, 3.9);
+      tl.fromTo(".tl-i", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.4, ease: POP, stagger: 0.06 }, 4.1);
+      tl.set("#tool-on", { opacity: 0 }, 0);
+      tl.set("#cur", { x: 1300, y: 640, opacity: 0 }, 0);
+      tl.to("#cur", { opacity: 1, duration: 0.3 }, 4.6);
+      move(728, 92, 4.7, 0.7);
+      press(5.45);
+      tl.to("#dim", { opacity: 1, duration: 0.3 }, 5.6);
+      ["#c3", "#c2", "#c1"].forEach((sel, idx) => {
+        const at = 5.75 + idx * 0.65;
+        tl.fromTo(sel, { opacity: 0, scale: 1.25 }, { opacity: 1, scale: 1, duration: 0.3, ease: SPRING }, at);
+        tl.to(sel, { opacity: 0, scale: 0.9, duration: 0.25, ease: "power2.in" }, at + 0.4);
+      });
+      tl.to("#dim", { opacity: 0, duration: 0.3 }, 7.65);
+      tl.to("#recdot", { borderRadius: "4px", duration: 0.25 }, 7.7);
+      tl.to("#recdot", { opacity: 0.35, duration: 0.5, yoyo: true, repeat: 15, ease: "sine.inOut" }, 7.9);
+      tl.to("#rectime", { opacity: 1, duration: 0.3 }, 7.8);
+
+      // 3. live drawing 9-16s
+      move(838, 92, 8.3, 0.5);
+      press(8.8);
+      tl.fromTo("#tool-on", { opacity: 0, x: 134 }, { opacity: 1, x: 134, duration: 0.2 }, 8.85);
+      move(334, 330, 9.0, 0.5);
+      tl.to("#hl", { strokeDashoffset: 0, duration: 0.9, ease: "power2.inOut" }, 9.55);
+      move(1352, 330, 9.55, 0.9);
+
+      move(896, 92, 10.6, 0.55);
+      press(11.15);
+      tl.to("#tool-on", { x: 192, duration: 0.25, ease: SPRING }, 11.2);
+      move(980, 592, 11.35, 0.45);
+      tl.to("#arw", { strokeDashoffset: 0, duration: 0.6, ease: "power2.inOut" }, 11.85);
+      move(668, 806, 11.85, 0.6);
+      tl.fromTo("#arw-head", { opacity: 0 }, { opacity: 1, duration: 0.12 }, 12.4);
+
+      tl.fromTo("#b1", { opacity: 0, scale: 0.3 }, { opacity: 1, scale: 1, duration: 0.45, ease: POP }, 12.7);
+      tl.fromTo("#b2", { opacity: 0, scale: 0.3 }, { opacity: 1, scale: 1, duration: 0.45, ease: POP }, 12.95);
+
+      move(500, 820, 13.3, 0.45);
+      press(13.8);
+      tl.fromTo("#rip", { opacity: 1, scale: 0.2 }, { opacity: 0, scale: 1.4, duration: 0.8, ease: "power2.out" }, 13.85);
+      tl.fromTo("#chip", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.5, ease: POP }, 14.2);
+      tl.to("#chip", { opacity: 0, duration: 0.3 }, 15.3);
+      move(728, 92, 14.6, 0.7);
+      press(15.4);
+      tl.to("#cur", { opacity: 0, duration: 0.2 }, 15.6);
+      fadeOut("#s2-w", 15.6);
+
+      // 4. editor 16-21s
+      fadeIn("#s4-w", 16.0);
+      tl.set("#pv-in", { transformOrigin: "175px 425px" }, 0);
+      tl.fromTo("#ph", { x: 0 }, { x: 1000, duration: 4.4, ease: "none" }, 16.3);
+      tl.to("#hL", { x: 130, duration: 0.9, ease: "power3.inOut" }, 16.7);
+      tl.to("#shL", { width: 134, duration: 0.9, ease: "power3.inOut" }, 16.7);
+      tl.to("#hR", { x: -150, duration: 0.9, ease: "power3.inOut" }, 16.8);
+      tl.to("#shR", { x: -150, width: 150, duration: 0.9, ease: "power3.inOut" }, 16.8);
+      tl.set("#cur", { x: 1400, y: 500 }, 16.0);
+      tl.to("#cur", { opacity: 1, duration: 0.2 }, 17.4);
+      move(1422, 176, 17.4, 0.6);
+      press(18.05);
+      tl.to("#knob", { x: 28, duration: 0.35, ease: SPRING }, 18.1);
+      tl.to("#tg-on", { opacity: 1, duration: 0.25 }, 18.1);
+      tl.to("#cur", { opacity: 0, duration: 0.2 }, 18.4);
+      tl.fromTo("#pv-ring", { opacity: 1, scale: 0.4 }, { opacity: 0, scale: 1.5, duration: 0.7 }, 18.5);
+      tl.to("#pv-in", { scale: 1.9, duration: 1.2, ease: "power3.inOut" }, 18.7);
+      tl.to("#pv-in", { scale: 1, duration: 0.9, ease: "power3.inOut" }, 20.0);
+      fadeOut("#s4-w", 20.6);
+
+      // 5. drive 21-26s
+      fadeIn("#s5-w", 21.0);
+      tl.fromTo("#dlg", { opacity: 0, scale: 0.94 }, { opacity: 1, scale: 1, duration: 0.6, ease: SPRING }, 21.1);
+      tl.set("#cur", { x: 1300, y: 760 }, 21.0);
+      tl.to("#cur", { opacity: 1, duration: 0.2 }, 21.6);
+      move(1196, 632, 21.6, 0.6);
+      press(22.3);
+      tl.to("#up-btn", { scale: 0.95, duration: 0.08, yoyo: true, repeat: 1 }, 22.3);
+      tl.to("#cur", { opacity: 0, duration: 0.2 }, 22.5);
+      tl.to("#ask", { opacity: 0, duration: 0.25 }, 22.5);
+      tl.to("#prog", { opacity: 1, duration: 0.3 }, 22.6);
+      tl.fromTo("#pfill", { scaleX: 0 }, { scaleX: 1, duration: 1.3, ease: "power1.inOut" }, 22.8);
+      tl.to("#dlg", { opacity: 0, scale: 0.96, duration: 0.35, ease: "power2.in" }, 24.2);
+      tl.fromTo("#dash", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.6, ease: SPRING }, 24.35);
+      tl.fromTo("#ondrive", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.45, ease: POP }, 24.75);
+      tl.fromTo("#toast", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.5, ease: POP }, 25.0);
+      fadeOut("#s5-w", 25.6);
+
+      // 6. end card 26-30s
+      fadeIn("#s6-w", 26.0, 0.6);
+      tl.fromTo("#e-logo", { opacity: 0, scale: 0.88 }, { opacity: 1, scale: 1, duration: 0.9, ease: SPRING }, 26.1);
+      tl.fromTo(["#e-t", "#e-s", "#e-u"], { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.7, ease: SPRING, stagger: 0.2 }, 26.5);
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>
