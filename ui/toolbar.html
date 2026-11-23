@@ -59,7 +59,7 @@
   .rec .time { font-variant-numeric: tabular-nums; font-weight: 600; display: none; }
   .rec.live .time { display: inline; }
 
-  #mic.on .slash { display: none; }
+  #mic.on .slash, #sysaudio.on .slash { display: none; }
   .sep { flex: none; width: 1px; height: 20px; margin: 0 6px; background: var(--line); }
   .swatch { width: 26px; }
   .swatch i { width: 16px; height: 16px; border-radius: 8px; box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.3); pointer-events: none; }
@@ -94,6 +94,13 @@
     transition: opacity 120ms ease, transform 120ms ease;
     pointer-events: none;
   }
+  .sizes {
+    position: fixed; top: 64px; display: none; gap: 2px; padding: 4px;
+    border-radius: 10px; background: var(--surface);
+    box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.16), 0 4px 12px rgba(0, 0, 0, 0.3);
+    transform: translateX(-50%);
+  }
+  .sizes.show { display: flex; }
   .tip.show { opacity: 1; transform: translate(-50%, 0); }
   .tip kbd { font: inherit; color: rgba(255, 255, 255, 0.5); margin-left: 8px; }
 
@@ -108,27 +115,33 @@
   <button id="area" data-tip="Record an area" data-key="⌃⌥A">
     <svg viewBox="0 0 24 24"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/></svg>
   </button>
+  <button id="shot" data-tip="Screenshot — full screen">
+    <svg viewBox="0 0 24 24"><path d="M4 8a2 2 0 0 1 2-2h2l1.5-2h5L16 6h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="3.5"/></svg>
+  </button>
+  <button id="shot-area" data-tip="Screenshot — drag an area">
+    <svg viewBox="0 0 24 24"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><circle cx="12" cy="12" r="3"/></svg>
+  </button>
   <span class="sep"></span>
 
   <button data-tool="pointer" data-tip="Pointer — use your apps" data-key="Esc">
     <svg viewBox="0 0 24 24"><path d="M5 3.5l13 6.5-5.5 1.8L10.7 17.5z"/></svg>
   </button>
-  <button data-tool="pen" data-tip="Pen" data-key="⌃⌥D">
+  <button data-tool="pen" data-tip="Pen · double-click for size" data-key="⌃⌥D">
     <svg viewBox="0 0 24 24"><path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="M14 7l3 3"/></svg>
   </button>
-  <button data-tool="highlighter" data-tip="Highlighter">
+  <button data-tool="highlighter" data-tip="Highlighter · double-click for size">
     <svg viewBox="0 0 24 24"><path d="M15 4l5 5-8 8-5-5z"/><path d="M7 12l-3 3v3h5l3-3"/></svg>
   </button>
-  <button data-tool="arrow" data-tip="Arrow">
+  <button data-tool="arrow" data-tip="Arrow · double-click for size">
     <svg viewBox="0 0 24 24"><path d="M6 18L18 6M9 6h9v9"/></svg>
   </button>
-  <button data-tool="rect" data-tip="Rectangle">
+  <button data-tool="rect" data-tip="Rectangle · double-click for size">
     <svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="2"/></svg>
   </button>
   <button data-tool="text" data-tip="Text — click, type, Enter">
     <svg viewBox="0 0 24 24"><path d="M5 6V4h14v2M12 4v16M9 20h6"/></svg>
   </button>
-  <button data-tool="step" data-tip="Numbered steps">
+  <button data-tool="step" data-tip="Steps — each click drops the next number: 1, 2, 3">
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M11 9l1.5-1v8"/></svg>
   </button>
   <button data-tool="eraser" data-tip="Eraser — drag over drawings to remove them">
@@ -144,6 +157,9 @@
   </button>
   <button id="mic" data-tip="Record microphone">
     <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/><path class="slash" d="M4 4l16 16"/></svg>
+  </button>
+  <button id="sysaudio" data-tip="Record Mac sound">
+    <svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/><path class="slash" d="M4 4l16 16"/></svg>
   </button>
   <button id="life" data-key="⌃⌥F"></button>
   <span id="swatches" style="display:contents"></span>
@@ -161,6 +177,7 @@
   <div class="status" id="status"></div>
 </div>
 <div class="tip" id="tip"></div>
+<div class="sizes" id="sizes" role="menu" aria-label="Stroke size"></div>
 
 <script>
   const { invoke } = window.__TAURI__.core;
@@ -176,11 +193,16 @@
     permanent: { tip: 'Ink stays until cleared', icon: '<svg viewBox="0 0 24 24"><path d="M12 16v5M8 3h8l-1 6 3 3v2H6v-2l3-3z"/></svg>' },
   };
 
-  const ink = { tool: 'pen', color: COLORS[0][0], life: 'fading' };
+  // Double-click a stroke tool to pick its size; a single click only selects the tool.
+  const SIZES = { small: 4, medium: 7, large: 11 };
+  const SIZED_TOOLS = new Set(['pen', 'highlighter', 'arrow', 'rect']);
+
+  const ink = { tool: 'pen', color: COLORS[0][0], life: 'fading', size: 'medium' };
   let mode = 'pointer';
   let spotlight = false;
   let camera = false;
   let mic = false;
+  let sysAudio = false;
   let startedAt = null;
   let statusTimer = null;
   let tipTimer = null;
@@ -197,6 +219,27 @@
     $('swatches').append(button);
   }
 
+  for (const [size, dot] of Object.entries(SIZES)) {
+    const button = document.createElement('button');
+    button.dataset.size = size;
+    button.setAttribute('aria-label', `${size} stroke`);
+    button.innerHTML = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="${dot / 2}" fill="currentColor" stroke="none"/></svg>`;
+    $('sizes').append(button);
+  }
+
+  function openSizes(button) {
+    const box = button.getBoundingClientRect();
+    $('sizes').style.left = `${box.left + box.width / 2}px`;
+    $('sizes').classList.add('show');
+  }
+
+  document.addEventListener('dblclick', (event) => {
+    const button = event.target.closest('button[data-tool]');
+    if (!button || !SIZED_TOOLS.has(button.dataset.tool)) return;
+    hideTip();
+    openSizes(button);
+  });
+
   function render() {
     document.querySelectorAll('[data-tool]').forEach((button) => {
       const tool = button.dataset.tool;
@@ -208,6 +251,9 @@
     $('camera').classList.toggle('on', camera);
     $('mic').classList.toggle('on', mic);
     $('mic').dataset.tip = mic ? 'Microphone on' : 'Microphone off';
+    $('sysaudio').classList.toggle('on', sysAudio);
+    $('sysaudio').dataset.tip = sysAudio ? 'Mac sound on' : 'Mac sound off';
+    document.querySelectorAll('[data-size]').forEach((button) => button.classList.toggle('on', button.dataset.size === ink.size));
     $('life').innerHTML = LIFE[ink.life].icon;
     $('life').dataset.tip = LIFE[ink.life].tip;
     $('rec').classList.toggle('live', startedAt !== null);
@@ -277,8 +323,18 @@
   // pointerdown, not click: selection reacts on press.
   document.addEventListener('pointerdown', (event) => {
     const button = event.target.closest('button');
-    if (!button || event.button !== 0) return;
+    if (!button || event.button !== 0) {
+      $('sizes').classList.remove('show');
+      return;
+    }
     hideTip();
+
+    if (button.dataset.size) {
+      ink.size = button.dataset.size;
+      $('sizes').classList.remove('show');
+      return syncInk();
+    }
+    $('sizes').classList.remove('show');
 
     if (button.dataset.tool) {
       if (button.dataset.tool === 'pointer') return setMode('pointer');
@@ -297,6 +353,9 @@
       case 'spotlight': return toggleSpotlight();
       case 'camera': return call('toggle_camera');
       case 'mic': return call('toggle_mic');
+      case 'sysaudio': return call('toggle_system_audio');
+      case 'shot': return call('take_screenshot', { region: 'full' });
+      case 'shot-area': return call('take_screenshot', { region: 'area' });
       case 'life':
         ink.life = ink.life === 'fading' ? 'permanent' : 'fading';
         syncInk();
@@ -320,6 +379,8 @@
   listen('camera', (event) => { camera = event.payload; render(); });
   listen('mic', (event) => { mic = event.payload; render(); });
   invoke('mic_enabled').then((on) => { mic = on; render(); });
+  listen('system-audio', (event) => { sysAudio = event.payload; render(); });
+  invoke('system_audio_enabled').then((on) => { sysAudio = on; render(); });
   listen('recording', (event) => {
     startedAt = event.payload.active ? Date.now() : null;
     $('time').textContent = '0:00';

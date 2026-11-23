@@ -1,5 +1,7 @@
 use objc2_app_kit::{NSWindow, NSWindowSharingType};
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use crate::recorder::Area;
+use tauri::utils::config::BackgroundThrottlingPolicy;
+use tauri::{LogicalPosition, AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 pub const TOOLBAR: &str = "toolbar";
 pub const OVERLAY: &str = "overlay";
@@ -59,7 +61,7 @@ pub const CAMERA_SIZE: f64 = 220.0;
 const CAMERA_MARGIN: f64 = 32.0;
 
 // The toolbar window is larger than the pill: the margin holds the shadow and the tooltips below it.
-const TOOLBAR_WIDTH: f64 = 880.0;
+const TOOLBAR_WIDTH: f64 = 1040.0;
 const TOOLBAR_HEIGHT: f64 = 112.0;
 const TOOLBAR_TOP: f64 = 34.0;
 
@@ -122,12 +124,8 @@ pub fn create(app: &AppHandle) -> Result<Created, String> {
 }
 
 /// Opens the webcam bubble bottom-left, or closes it. Returns true when it is now open.
-pub fn toggle_camera(app: &AppHandle) -> Result<bool, String> {
-    if let Some(camera) = app.get_webview_window(CAMERA) {
-        camera.close().map_err(|error| error.to_string())?;
-        return Ok(false);
-    }
-
+/// Built on request; the page stays transparent until the first frame, so no empty bubble appears.
+fn create_camera(app: &AppHandle) -> Result<(), String> {
     let monitor = app
         .primary_monitor()
         .map_err(|error| error.to_string())?
@@ -144,11 +142,40 @@ pub fn toggle_camera(app: &AppHandle) -> Result<bool, String> {
         .accept_first_mouse(true)
         .visible_on_all_workspaces(true)
         .position(CAMERA_MARGIN, size.height - CAMERA_SIZE - CAMERA_MARGIN)
+        // The bubble never takes focus; without this WebKit throttles it and the video freezes.
+        .background_throttling(BackgroundThrottlingPolicy::Disabled)
         .inner_size(CAMERA_SIZE, CAMERA_SIZE)
         .build()
         .map_err(|error| error.to_string())?;
     set_level(&camera, STATUS_WINDOW_LEVEL + 1)?;
+    Ok(())
+}
+
+pub fn camera_open(app: &AppHandle) -> bool {
+    app.get_webview_window(CAMERA).is_some()
+}
+
+/// On: builds the camera window; it shows itself on the first frame (see show_camera).
+/// Off: closes the window, which stops the webcam and frees its memory.
+pub fn toggle_camera(app: &AppHandle) -> Result<bool, String> {
+    if let Some(camera) = app.get_webview_window(CAMERA) {
+        camera.close().map_err(|error| error.to_string())?;
+        return Ok(false);
+    }
+
+    create_camera(app)?;
     Ok(true)
+}
+
+/// Keeps the bubble inside what is being recorded: bottom-left of the area, or of the screen.
+/// Without this, an area recording leaves the bubble outside the captured rectangle.
+pub fn place_camera(app: &AppHandle, area: Area) {
+    let Some(camera) = app.get_webview_window(CAMERA) else {
+        return;
+    };
+    let x = area.x + CAMERA_MARGIN.min((area.width - CAMERA_SIZE).max(0.0));
+    let y = area.y + (area.height - CAMERA_SIZE - CAMERA_MARGIN).max(0.0);
+    let _ = camera.set_position(LogicalPosition::new(x, y));
 }
 
 /// Hides the toolbar from screen capture (Zoom, Slack, Meet, screenshots) unless the user wants it shown.

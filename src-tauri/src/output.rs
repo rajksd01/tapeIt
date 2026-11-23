@@ -70,6 +70,12 @@ impl Settings {
             })
     }
 
+    /// Turns audio inputs off after a recording, so every recording starts silent by default.
+    pub fn reset_inputs(&mut self) {
+        self.record_mic = false;
+        self.record_system_audio = false;
+    }
+
     pub fn save(&self, file: &Path) -> Result<(), String> {
         if let Some(parent) = file.parent() {
             fs::create_dir_all(parent).map_err(|error| error.to_string())?;
@@ -126,4 +132,22 @@ fn copy_file(path: &Path) -> Result<(), String> {
         return Err("Could not copy to clipboard".into());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Mic or system audio turned on mid-recording must not leak into the next one.
+    #[test]
+    fn reset_turns_audio_off() {
+        let mut settings = Settings::load(Path::new("/nonexistent"), Path::new("/tmp"));
+        settings.record_mic = true;
+        settings.record_system_audio = true;
+
+        settings.reset_inputs();
+
+        assert!(!settings.record_mic);
+        assert!(!settings.record_system_audio);
+    }
 }

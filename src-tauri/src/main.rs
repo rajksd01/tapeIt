@@ -6,7 +6,9 @@ mod media;
 mod output;
 mod queue;
 mod recorder;
+mod screenshot;
 mod tray;
+mod writer;
 mod windows;
 
 use std::io::Write;
@@ -18,6 +20,7 @@ use std::sync::{Arc, Mutex};
 use output::{Settings, Target, UploadPolicy};
 use queue::{Notice, Uploads};
 use recorder::{Area, AudioSources, Recording};
+use screenshot::Region;
 use serde::{Deserialize, Serialize};
 use tauri::menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tauri::{ActivationPolicy, AppHandle, Emitter, Manager, State};
@@ -130,6 +133,25 @@ fn status(app: &AppHandle, message: impl Into<String>) {
     let _ = app.emit("status", message.into());
 }
 
+fn on_off(value: bool) -> &'static str {
+    if value {
+        return "on";
+    }
+    "off"
+}
+
+/// Appends one line to ~/Library/Logs/TapeIt.log; failures are ignored because logging is best-effort.
+fn log_line(line: &str) {
+    let Some(home) = std::env::var_os("HOME") else {
+        return;
+    };
+    let path = PathBuf::from(home).join("Library/Logs/TapeIt.log");
+    let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path) else {
+        return;
+    };
+    let _ = writeln!(file, "{} {line}", chrono::Local::now().format("%H:%M:%S"));
+}
+
 fn play(sound: &str) {
     let _ = Command::new("afplay").arg(sound).spawn();
 }
@@ -181,10 +203,20 @@ async fn start_recording(app: AppHandle, state: State<'_, AppState>, area: Optio
         system: settings.record_system_audio,
     };
 
+    // Say what will be captured, so a silent recording is never a surprise.
+    let heard = format!(
+        "Recording · mic {} · Mac sound {}",
+        on_off(audio.microphone),
+        on_off(audio.system)
+    );
+    log_line(&heard);
+    status(&app, heard);
+
     // The sound plays before capture starts, so system audio does not record it.
     play(START_SOUND);
     *slot = Some(recorder::start(&path, area, state.scale, hidden, audio)?);
     *state.recording_area.lock().unwrap() = area.unwrap_or(state.screen);
+    windows::place_camera(&app, area.unwrap_or(state.screen));
     input::begin_click_log();
     tray::set_look(&app, tray::Look::Recording);
     app.emit("recording", RecordingEvent { active: true, area }).map_err(|error| error.to_string())
@@ -201,7 +233,19 @@ async fn stop_recording(app: AppHandle, state: State<'_, AppState>) -> Result<()
 
     let clicks = input::end_click_log();
     let file = recording.stop()?;
+    log_line(&format!("Stopped · {}", file.display()));
     let settings = state.settings.lock().unwrap().clone();
+
+    // Mic, system audio and camera go back to off, and drawings clear, so the next recording starts clean.
+    // This runs after capture stops, so the drawings still appear in the last frames.
+    let _ = app.emit("clear", ());
+    let _ = set_mode(app.clone(), app.state::<AppState>(), Mode::Pointer);
+    update_settings(&app, Settings::reset_inputs);
+    let _ = app.emit("mic", false);
+    let _ = app.emit("system-audio", false);
+    if windows::camera_open(&app) {
+        let _ = toggle_camera(app.clone());
+    }
     let (message, path) = output::deliver(&file, &settings)?;
     status(&app, message);
     library_changed(&app);
@@ -449,9 +493,7 @@ fn on_menu(app: &AppHandle, event: MenuEvent) {
             windows::set_toolbar_shared(app, shared);
         }
         "record-mic" => toggle_mic(app.clone()).map(|_| ()).unwrap_or_default(),
-        "record-system-audio" => {
-            update_settings(app, |settings| settings.record_system_audio = !settings.record_system_audio)
-        }
+        "record-system-audio" => toggle_system_audio(app.clone()).map(|_| ()).unwrap_or_default(),
         "upload-ask" => update_settings(app, |settings| settings.upload = UploadPolicy::Ask),
         "upload-always" => update_settings(app, |settings| settings.upload = UploadPolicy::Always),
         "upload-never" => update_settings(app, |settings| settings.upload = UploadPolicy::Never),
@@ -501,11 +543,27 @@ fn toggle_recording(app: &AppHandle) {
     });
 }
 
+/// Pushes the current mic and system audio choice into a running recording, if any.
+fn apply_audio(app: &AppHandle) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    let settings = state.settings.lock().unwrap().clone();
+    let mut slot = state.recording.lock().unwrap();
+    let Some(recording) = slot.as_mut() else {
+        return Ok(());
+    };
+    recording.set_audio(AudioSources {
+        microphone: settings.record_mic,
+        system: settings.record_system_audio,
+    })
+}
+
 /// Flips the microphone setting and tells the toolbar, so its mic button stays in sync with the menu.
 #[tauri::command]
 fn toggle_mic(app: AppHandle) -> Result<bool, String> {
     update_settings(&app, |settings| settings.record_mic = !settings.record_mic);
     let on = app.state::<AppState>().settings.lock().unwrap().record_mic;
+    log_line(&format!("toggle_mic -> {on}"));
+    apply_audio(&app)?;
     app.emit("mic", on).map_err(|error| error.to_string())?;
     Ok(on)
 }
@@ -515,9 +573,55 @@ fn mic_enabled(state: State<AppState>) -> bool {
     state.settings.lock().unwrap().record_mic
 }
 
+/// Flips system audio and tells the toolbar, so its button stays in sync with the menu.
+#[tauri::command]
+fn toggle_system_audio(app: AppHandle) -> Result<bool, String> {
+    update_settings(&app, |settings| settings.record_system_audio = !settings.record_system_audio);
+    let on = app.state::<AppState>().settings.lock().unwrap().record_system_audio;
+    log_line(&format!("toggle_system_audio -> {on}"));
+    apply_audio(&app)?;
+    app.emit("system-audio", on).map_err(|error| error.to_string())?;
+    Ok(on)
+}
+
+#[tauri::command]
+fn system_audio_enabled(state: State<AppState>) -> bool {
+    state.settings.lock().unwrap().record_system_audio
+}
+
+/// The toolbar hides during capture so it never shows up in the screenshot; drawings stay.
+const TOOLBAR_HIDE_MS: u64 = 200;
+
+#[tauri::command]
+async fn take_screenshot(app: AppHandle, region: Region) -> Result<(), String> {
+    let toolbar = app.get_webview_window(windows::TOOLBAR).ok_or("Toolbar missing")?;
+    toolbar.hide().map_err(|error| error.to_string())?;
+    std::thread::sleep(std::time::Duration::from_millis(TOOLBAR_HIDE_MS));
+
+    let cache = app.path().app_cache_dir().map_err(|error| error.to_string())?;
+    std::fs::create_dir_all(&cache).map_err(|error| error.to_string())?;
+    let captured = screenshot::capture(&cache, region);
+    let _ = toolbar.show();
+
+    let Some(file) = captured? else {
+        return Ok(());
+    };
+    let settings = app.state::<AppState>().settings.lock().unwrap().clone();
+    let (message, _) = output::deliver(&file, &settings)?;
+    status(&app, message);
+    Ok(())
+}
+
 #[tauri::command]
 fn toggle_camera(app: AppHandle) -> Result<bool, String> {
     let on = windows::toggle_camera(&app)?;
+
+    // Turned on mid-recording: put the bubble inside the recorded area right away.
+    let state = app.state::<AppState>();
+    let recording = state.recording.lock().unwrap().is_some();
+    if on && recording {
+        windows::place_camera(&app, *state.recording_area.lock().unwrap());
+    }
     app.emit("camera", on).map_err(|error| error.to_string())?;
     Ok(on)
 }
@@ -632,6 +736,9 @@ fn main() {
             record,
             toggle_mic,
             mic_enabled,
+            toggle_system_audio,
+            system_audio_enabled,
+            take_screenshot,
             toggle_camera,
             start_recording,
             stop_recording,

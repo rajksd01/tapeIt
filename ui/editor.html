@@ -146,7 +146,12 @@
     $('kept').style.width = duration ? `${((end - start) / duration) * 100}%` : '0';
     $('playhead').style.left = fraction(video.currentTime);
     $('time').textContent = `${clock(Math.max(0, video.currentTime - start))} / ${clock(end - start)}`;
-    $('play-icon').innerHTML = video.paused ? PLAY : PAUSE;
+    // Rewriting the SVG 60 times a second forces a re-parse; only swap it when play state flips.
+    const icon = video.paused ? PLAY : PAUSE;
+    if ($('play-icon').dataset.icon !== icon) {
+      $('play-icon').innerHTML = icon;
+      $('play-icon').dataset.icon = icon;
+    }
   }
 
   function timeAt(clientX) {

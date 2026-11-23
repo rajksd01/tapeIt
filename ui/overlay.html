@@ -84,6 +84,9 @@
     step: { width: 0, alpha: 1 },
   };
 
+  // Pen size from the toolbar scales each tool's base width.
+  const SIZE_SCALE = { small: 0.5, medium: 1, large: 2 };
+
   const canvas = document.getElementById('canvas');
   const context = canvas.getContext('2d');
   const $ = (id) => document.getElementById(id);
@@ -149,7 +152,7 @@
     context.globalAlpha = style.alpha * alpha;
     context.strokeStyle = stroke.color;
     context.fillStyle = stroke.color;
-    context.lineWidth = style.width;
+    context.lineWidth = style.width * (SIZE_SCALE[stroke.size] ?? 1);
     context.lineCap = 'round';
     context.lineJoin = 'round';
 
